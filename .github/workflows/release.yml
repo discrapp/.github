@@ -77,7 +77,7 @@ jobs:
 
   heimdallr:
     needs: release
-    uses: appdiscr/.github/.github/workflows/heimdallr.yml@test-heimdallr
+    uses: appdiscr/.github/.github/workflows/heimdallr.yml@main
     permissions:
       contents: write
       issues: write
