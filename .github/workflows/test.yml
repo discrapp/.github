@@ -1,0 +1,82 @@
+---
+on:
+  workflow_call:
+    inputs:
+      node_version:
+        required: false
+        type: string
+        default: "22"
+        description: Node.js version to use
+      coverage_threshold:
+        required: false
+        type: number
+        default: 100
+        description: Minimum code coverage percentage (0-100)
+      working_directory:
+        required: false
+        type: string
+        default: "."
+        description: Working directory for the tests
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node_version }}
+          cache: npm
+          cache-dependency-path: ${{ inputs.working_directory }}/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ${{ inputs.working_directory }}
+        run: npm ci
+
+      - name: Run tests with coverage
+        working-directory: ${{ inputs.working_directory }}
+        run: npm run test:coverage
+
+      - name: Check coverage threshold
+        working-directory: ${{ inputs.working_directory }}
+        run: |
+          COVERAGE=$(node -e "
+            const fs = require('fs');
+            const coverage = JSON.parse(fs.readFileSync('coverage/coverage-summary.json', 'utf8'));
+            const totals = coverage.total;
+            const minCoverage = Math.min(
+              totals.lines.pct,
+              totals.statements.pct,
+              totals.functions.pct,
+              totals.branches.pct
+            );
+            console.log(minCoverage.toFixed(2));
+          ")
+
+          THRESHOLD=${{ inputs.coverage_threshold }}
+
+          echo "Coverage: ${COVERAGE}%"
+          echo "Threshold: ${THRESHOLD}%"
+
+          if (( $(echo "$COVERAGE < $THRESHOLD" | bc -l) )); then
+            echo "❌ Coverage ${COVERAGE}% is below threshold ${THRESHOLD}%"
+            exit 1
+          else
+            echo "✅ Coverage ${COVERAGE}% meets threshold ${THRESHOLD}%"
+          fi
+
+      - name: Upload coverage reports
+        uses: codecov/codecov-action@v5
+        if: always()
+        with:
+          working-directory: ${{ inputs.working_directory }}
+          files: ./coverage/lcov.info
+          flags: unittests
+          fail_ci_if_error: false
