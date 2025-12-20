@@ -1,18 +1,18 @@
-# AceBack .github - Project Memory
+# Discr .github - Project Memory
 
 This file contains persistent context for Claude Code sessions on this project.
 It will be automatically loaded at the start of every session.
 
 ## Project Overview
 
-This repository contains reusable GitHub Actions workflows for AceBack projects.
+This repository contains reusable GitHub Actions workflows for Discr projects.
 It provides centralized CI/CD workflows that are consumed by other repositories
 via `workflow_call`.
 
 **Key Details:**
 
 - **Purpose:** Shared GitHub Actions workflows
-- **Consumers:** All AceBack repositories (mobile, api, docs)
+- **Consumers:** All Discr repositories (mobile, api, docs)
 - **Workflows:** Release, Pre-commit, Stale, Heimdallr (notifications)
 - **Pattern:** Reusable workflows with `workflow_call`
 - **Forked from:** Mosher-Labs/.github (sync manually as needed)
@@ -47,7 +47,7 @@ Handles semantic versioning and release creation using Conventional Commits.
 ```yaml
 jobs:
   release:
-    uses: "acebackapp/.github/.github/workflows/release.yml@main"
+    uses: "discrapp/.github/.github/workflows/release.yml@main"
     secrets: inherit
     permissions:
       contents: write
@@ -179,7 +179,7 @@ If you modify `heimdallr.yml` and also update `release.yml` to use the new versi
 
    ```yaml
    heimdallr:
-     uses: acebackapp/.github/.github/workflows/heimdallr.yml@fix-heimdallr
+     uses: discrapp/.github/.github/workflows/heimdallr.yml@fix-heimdallr
    ```
 
 1. Commit and push
@@ -188,7 +188,7 @@ If you modify `heimdallr.yml` and also update `release.yml` to use the new versi
 
    ```yaml
    heimdallr:
-     uses: acebackapp/.github/.github/workflows/heimdallr.yml@main
+     uses: discrapp/.github/.github/workflows/heimdallr.yml@main
    ```
 
 1. Commit the change back to `@main` reference
@@ -236,7 +236,7 @@ pre-commit autoupdate           # Update hook versions
 
 ## Consuming Repositories
 
-The following AceBack repos use these shared workflows:
+The following Discr repos use these shared workflows:
 
 - **mobile** - React Native mobile app
 - **api** - Backend API services

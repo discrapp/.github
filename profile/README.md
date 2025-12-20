@@ -1,11 +1,11 @@
-# AceBack
+# Discr
 
-Welcome to **AceBack**, a mobile-first application for recovering lost disc
+Welcome to **Discr**, a mobile-first application for recovering lost disc
 golf discs.
 
 ## About
 
-AceBack is built with modern technologies:
+Discr is built with modern technologies:
 
 - **Mobile**: React Native with Expo
 - **Backend**: Supabase
