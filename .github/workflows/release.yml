@@ -60,7 +60,7 @@ jobs:
           branch: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || github.ref_name }}
           noVersionBumpBehavior: "silent"
           skipInvalidTags: true
-          patchList: fix, bugfix, perf, refactor, test, tests, chore
+          patchList: fix, bugfix, perf, refactor, test, tests, chore, ci
 
       - name: Create Release
         if: github.event_name != 'pull_request' && steps.semver.outputs.next != ''
