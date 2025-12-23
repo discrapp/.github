@@ -21,10 +21,14 @@ via `workflow_call`.
 
 ```text
 .github/
-├── .github/workflows/     # Shared workflows
-│   ├── release.yml        # Semantic versioning & releases
-│   ├── terraform.yml      # Terraform plan/apply
-│   └── heimdallr.yml      # Notifications (Slack/PR comments)
+├── .github/workflows/          # Shared workflows
+│   ├── coverage.yml            # Coverage reporting for PRs (uses heimdallr)
+│   ├── heimdallr.yml           # Notifications (Slack/PR comments)
+│   ├── pre-commit.yml          # Pre-commit hook validation
+│   ├── release.yml             # Semantic versioning & releases
+│   ├── stale.yml               # Stale issue/PR management
+│   ├── terraform.yml           # Terraform plan/apply
+│   └── test.yml                # Node.js test runner
 ├── .pre-commit-config.yaml
 └── CLAUDE.md
 ```
@@ -243,6 +247,56 @@ The following Discr repos use these shared workflows:
 - **docs** - Documentation site
 
 ## Important Notes
+
+### CRITICAL: Always Use Reusable Workflows
+
+**MANDATORY:** When implementing any CI/CD functionality that will be used
+across multiple repositories (mobile, api, web, docs), you MUST create a
+reusable workflow in this `.github` repo first.
+
+**Do NOT:**
+
+- Implement the same workflow logic in multiple repos
+- Copy/paste workflow code between repos
+- Create repo-specific workflows for shared functionality
+
+**Do:**
+
+- Create a reusable workflow here with `workflow_call` trigger
+- Have consuming repos call the shared workflow
+- Pass repo-specific configuration via inputs
+
+**Example - Coverage Reporting:**
+
+```yaml
+# In .github repo: .github/workflows/coverage.yml
+on:
+  workflow_call:
+    inputs:
+      coverage_threshold:
+        type: number
+        default: 50
+
+# In consuming repo:
+jobs:
+  coverage:
+    uses: "discrapp/.github/.github/workflows/coverage.yml@main"
+    with:
+      coverage_threshold: 40
+      pr_statements: "75.5"
+      pr_branches: "60.0"
+      pr_functions: "80.0"
+      pr_lines: "75.0"
+    secrets:
+      HEIMDALLR_TOKEN: ${{ secrets.HEIMDALLR_TOKEN }}
+```
+
+**Why this matters:**
+
+- Single source of truth for workflow logic
+- Updates automatically propagate to all repos
+- No duplicate code to maintain
+- Consistent behavior across all projects
 
 ### Code Quality Standards
 

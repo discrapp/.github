@@ -1,0 +1,198 @@
+---
+name: Coverage
+
+on:
+  workflow_call:
+    inputs:
+      coverage_threshold:
+        required: false
+        type: number
+        default: 50
+        description: Minimum code coverage percentage (0-100)
+      pr_statements:
+        required: true
+        type: string
+        description: PR statement coverage percentage
+      pr_branches:
+        required: true
+        type: string
+        description: PR branch coverage percentage
+      pr_functions:
+        required: true
+        type: string
+        description: PR function coverage percentage
+      pr_lines:
+        required: true
+        type: string
+        description: PR line coverage percentage
+      base_statements:
+        required: false
+        type: string
+        default: "0"
+        description: Base branch statement coverage percentage
+      base_branches:
+        required: false
+        type: string
+        default: "0"
+        description: Base branch branch coverage percentage
+      base_functions:
+        required: false
+        type: string
+        default: "0"
+        description: Base branch function coverage percentage
+      base_lines:
+        required: false
+        type: string
+        default: "0"
+        description: Base branch line coverage percentage
+    secrets:
+      HEIMDALLR_TOKEN:
+        required: true
+
+jobs:
+  coverage-report:
+    name: Coverage Report
+    runs-on: ubuntu-latest
+    outputs:
+      comment_content: ${{ steps.build-comment.outputs.content }}
+      below_minimum: ${{ steps.diff.outputs.below_minimum }}
+      coverage_decreased: ${{ steps.diff.outputs.coverage_decreased }}
+
+    steps:
+      - name: Calculate coverage diff and check thresholds
+        id: diff
+        run: |
+          PR_STMT="${{ inputs.pr_statements }}"
+          BASE_STMT="${{ inputs.base_statements }}"
+          THRESHOLD="${{ inputs.coverage_threshold }}"
+
+          STMT_DIFF=$(echo "$PR_STMT - $BASE_STMT" | bc)
+          echo "stmt_diff=$STMT_DIFF" >> "$GITHUB_OUTPUT"
+
+          DECREASED=$(echo "$STMT_DIFF < 0" | bc -l)
+          if [ "$DECREASED" = "1" ]; then
+            echo "coverage_decreased=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "coverage_decreased=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          BELOW_MIN=$(echo "$PR_STMT < $THRESHOLD" | bc -l)
+          if [ "$BELOW_MIN" = "1" ]; then
+            echo "below_minimum=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "below_minimum=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build comment content
+        id: build-comment
+        run: |
+          PR_STMT="${{ inputs.pr_statements }}"
+          PR_BRANCH="${{ inputs.pr_branches }}"
+          PR_FUNC="${{ inputs.pr_functions }}"
+          PR_LINES="${{ inputs.pr_lines }}"
+          BASE_STMT="${{ inputs.base_statements }}"
+          BASE_BRANCH="${{ inputs.base_branches }}"
+          BASE_FUNC="${{ inputs.base_functions }}"
+          BASE_LINES="${{ inputs.base_lines }}"
+          THRESHOLD="${{ inputs.coverage_threshold }}"
+          BELOW_MIN="${{ steps.diff.outputs.below_minimum }}"
+          DECREASED="${{ steps.diff.outputs.coverage_decreased }}"
+
+          STMT_DIFF=$(echo "$PR_STMT - $BASE_STMT" | bc)
+          BRANCH_DIFF=$(echo "$PR_BRANCH - $BASE_BRANCH" | bc)
+          FUNC_DIFF=$(echo "$PR_FUNC - $BASE_FUNC" | bc)
+          LINES_DIFF=$(echo "$PR_LINES - $BASE_LINES" | bc)
+
+          # Format diff with emoji
+          format_diff() {
+            local diff=$1
+            local is_positive=$(echo "$diff >= 0" | bc -l)
+            if [ "$is_positive" = "1" ]; then
+              echo "+${diff}% 📈"
+            else
+              echo "${diff}% 📉"
+            fi
+          }
+
+          STMT_DIFF_FMT=$(format_diff "$STMT_DIFF")
+          BRANCH_DIFF_FMT=$(format_diff "$BRANCH_DIFF")
+          FUNC_DIFF_FMT=$(format_diff "$FUNC_DIFF")
+          LINES_DIFF_FMT=$(format_diff "$LINES_DIFF")
+
+          # Overall emoji
+          OVERALL_POSITIVE=$(echo "$STMT_DIFF >= 0" | bc -l)
+          if [ "$OVERALL_POSITIVE" = "1" ]; then
+            OVERALL_EMOJI="📈"
+            OVERALL_SIGN="+"
+          else
+            OVERALL_EMOJI="📉"
+            OVERALL_SIGN=""
+          fi
+
+          # Status
+          if [ "$BELOW_MIN" = "true" ]; then
+            STATUS="❌ **FAILED**: Coverage below ${THRESHOLD}% minimum threshold"
+          elif [ "$DECREASED" = "true" ]; then
+            STATUS="❌ **FAILED**: Coverage decreased from base branch"
+          else
+            STATUS="✅ **PASSED**: Coverage maintained or improved"
+          fi
+
+          # Base note
+          HAS_BASE=$(echo "$BASE_STMT > 0" | bc -l)
+          if [ "$HAS_BASE" = "1" ]; then
+            BASE_NOTE=""
+          else
+            BASE_NOTE=$'\n\n> ⚠️ No cached coverage for main branch. Comparison will be available after merging.'
+          fi
+
+          # Build comment
+          {
+            echo "content<<EOFCONTENT"
+            echo "## 🔱 Heimdallr Coverage Report"
+            echo ""
+            echo "**Overall Coverage: ${PR_STMT}%** ${OVERALL_EMOJI} (${OVERALL_SIGN}${STMT_DIFF}% from base)"
+            echo ""
+            echo "| Metric | Base (main) | PR | Diff |"
+            echo "|--------|-------------|-----|------|"
+            echo "| Statements | ${BASE_STMT}% | ${PR_STMT}% | ${STMT_DIFF_FMT} |"
+            echo "| Branches | ${BASE_BRANCH}% | ${PR_BRANCH}% | ${BRANCH_DIFF_FMT} |"
+            echo "| Functions | ${BASE_FUNC}% | ${PR_FUNC}% | ${FUNC_DIFF_FMT} |"
+            echo "| Lines | ${BASE_LINES}% | ${PR_LINES}% | ${LINES_DIFF_FMT} |"
+            echo ""
+            echo "### Status"
+            echo "${STATUS}${BASE_NOTE}"
+            echo ""
+            echo "### Thresholds"
+            echo "- Minimum coverage: **${THRESHOLD}%**"
+            echo "- Coverage must not decrease from base branch"
+            echo ""
+            echo "---"
+            echo "*🔱 Heimdallr watches over your code coverage*"
+            echo "EOFCONTENT"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Fail if coverage thresholds not met
+        run: |
+          if [ "${{ steps.diff.outputs.below_minimum }}" = "true" ]; then
+            echo "❌ Coverage is below ${{ inputs.coverage_threshold }}% minimum threshold"
+            exit 1
+          fi
+
+          if [ "${{ steps.diff.outputs.coverage_decreased }}" = "true" ]; then
+            echo "❌ Coverage decreased from base branch"
+            exit 1
+          fi
+
+          echo "✅ Coverage checks passed"
+
+  post-comment:
+    name: Post Coverage Comment
+    needs: coverage-report
+    uses: discrapp/.github/.github/workflows/heimdallr.yml@main
+    with:
+      enable_comment_on_pr: true
+      comment_content: ${{ needs.coverage-report.outputs.comment_content }}
+      comment_identifier: "<!-- heimdallr-coverage-report -->"
+    secrets:
+      HEIMDALLR_TOKEN: ${{ secrets.HEIMDALLR_TOKEN }}
