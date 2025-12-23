@@ -53,10 +53,6 @@ jobs:
   coverage-report:
     name: Coverage Report
     runs-on: ubuntu-latest
-    outputs:
-      comment_content: ${{ steps.build-comment.outputs.content }}
-      below_minimum: ${{ steps.diff.outputs.below_minimum }}
-      coverage_decreased: ${{ steps.diff.outputs.coverage_decreased }}
 
     steps:
       - name: Calculate coverage diff and check thresholds
@@ -83,95 +79,94 @@ jobs:
             echo "below_minimum=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Build comment content
-        id: build-comment
-        run: |
-          PR_STMT="${{ inputs.pr_statements }}"
-          PR_BRANCH="${{ inputs.pr_branches }}"
-          PR_FUNC="${{ inputs.pr_functions }}"
-          PR_LINES="${{ inputs.pr_lines }}"
-          BASE_STMT="${{ inputs.base_statements }}"
-          BASE_BRANCH="${{ inputs.base_branches }}"
-          BASE_FUNC="${{ inputs.base_functions }}"
-          BASE_LINES="${{ inputs.base_lines }}"
-          THRESHOLD="${{ inputs.coverage_threshold }}"
-          BELOW_MIN="${{ steps.diff.outputs.below_minimum }}"
-          DECREASED="${{ steps.diff.outputs.coverage_decreased }}"
+      - name: Post coverage comment
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.HEIMDALLR_TOKEN }}
+          script: |
+            const prStmt = ${{ inputs.pr_statements }};
+            const prBranch = ${{ inputs.pr_branches }};
+            const prFunc = ${{ inputs.pr_functions }};
+            const prLines = ${{ inputs.pr_lines }};
+            const baseStmt = ${{ inputs.base_statements }};
+            const baseBranch = ${{ inputs.base_branches }};
+            const baseFunc = ${{ inputs.base_functions }};
+            const baseLines = ${{ inputs.base_lines }};
+            const threshold = ${{ inputs.coverage_threshold }};
+            const belowMin = '${{ steps.diff.outputs.below_minimum }}' === 'true';
+            const decreased = '${{ steps.diff.outputs.coverage_decreased }}' === 'true';
 
-          STMT_DIFF=$(echo "$PR_STMT - $BASE_STMT" | bc)
-          BRANCH_DIFF=$(echo "$PR_BRANCH - $BASE_BRANCH" | bc)
-          FUNC_DIFF=$(echo "$PR_FUNC - $BASE_FUNC" | bc)
-          LINES_DIFF=$(echo "$PR_LINES - $BASE_LINES" | bc)
+            const stmtDiff = (prStmt - baseStmt).toFixed(2);
+            const branchDiff = (prBranch - baseBranch).toFixed(2);
+            const funcDiff = (prFunc - baseFunc).toFixed(2);
+            const linesDiff = (prLines - baseLines).toFixed(2);
 
-          # Format diff with emoji
-          format_diff() {
-            local diff=$1
-            local is_positive
-            is_positive=$(echo "$diff >= 0" | bc -l)
-            if [ "$is_positive" = "1" ]; then
-              echo "+${diff}% 📈"
-            else
-              echo "${diff}% 📉"
-            fi
-          }
+            const formatDiff = (diff) => {
+              const num = parseFloat(diff);
+              if (num > 0) return `+${diff}% 📈`;
+              if (num < 0) return `${diff}% 📉`;
+              return `${diff}%`;
+            };
 
-          STMT_DIFF_FMT=$(format_diff "$STMT_DIFF")
-          BRANCH_DIFF_FMT=$(format_diff "$BRANCH_DIFF")
-          FUNC_DIFF_FMT=$(format_diff "$FUNC_DIFF")
-          LINES_DIFF_FMT=$(format_diff "$LINES_DIFF")
+            const getStatus = () => {
+              if (belowMin) return `❌ **FAILED**: Coverage below ${threshold}% minimum threshold`;
+              if (decreased) return '❌ **FAILED**: Coverage decreased from base branch';
+              return '✅ **PASSED**: Coverage maintained or improved';
+            };
 
-          # Overall emoji
-          OVERALL_POSITIVE=$(echo "$STMT_DIFF >= 0" | bc -l)
-          if [ "$OVERALL_POSITIVE" = "1" ]; then
-            OVERALL_EMOJI="📈"
-            OVERALL_SIGN="+"
-          else
-            OVERALL_EMOJI="📉"
-            OVERALL_SIGN=""
-          fi
+            const overallEmoji = parseFloat(stmtDiff) >= 0 ? '📈' : '📉';
+            const overallSign = parseFloat(stmtDiff) >= 0 ? '+' : '';
+            const baseNote = baseStmt > 0 ? '' : '\n\n> ⚠️ No cached coverage for main branch. Comparison will be available after merging.';
 
-          # Status
-          if [ "$BELOW_MIN" = "true" ]; then
-            STATUS="❌ **FAILED**: Coverage below ${THRESHOLD}% minimum threshold"
-          elif [ "$DECREASED" = "true" ]; then
-            STATUS="❌ **FAILED**: Coverage decreased from base branch"
-          else
-            STATUS="✅ **PASSED**: Coverage maintained or improved"
-          fi
+            const body = [
+              '## 🔱 Heimdallr Coverage Report',
+              '',
+              `**Overall Coverage: ${prStmt}%** ${overallEmoji} (${overallSign}${stmtDiff}% from base)`,
+              '',
+              '| Metric | Base (main) | PR | Diff |',
+              '|--------|-------------|-----|------|',
+              `| Statements | ${baseStmt}% | ${prStmt}% | ${formatDiff(stmtDiff)} |`,
+              `| Branches | ${baseBranch}% | ${prBranch}% | ${formatDiff(branchDiff)} |`,
+              `| Functions | ${baseFunc}% | ${prFunc}% | ${formatDiff(funcDiff)} |`,
+              `| Lines | ${baseLines}% | ${prLines}% | ${formatDiff(linesDiff)} |`,
+              '',
+              '### Status',
+              getStatus() + baseNote,
+              '',
+              '### Thresholds',
+              `- Minimum coverage: **${threshold}%**`,
+              '- Coverage must not decrease from base branch',
+              '',
+              '---',
+              '*🔱 Heimdallr watches over your code coverage*',
+              '<!-- heimdallr-coverage-report -->'
+            ].join('\n');
 
-          # Base note
-          HAS_BASE=$(echo "$BASE_STMT > 0" | bc -l)
-          if [ "$HAS_BASE" = "1" ]; then
-            BASE_NOTE=""
-          else
-            BASE_NOTE=$'\n\n> ⚠️ No cached coverage for main branch. Comparison will be available after merging.'
-          fi
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
 
-          # Build comment
-          {
-            echo "content<<EOFCONTENT"
-            echo "## 🔱 Heimdallr Coverage Report"
-            echo ""
-            echo "**Overall Coverage: ${PR_STMT}%** ${OVERALL_EMOJI} (${OVERALL_SIGN}${STMT_DIFF}% from base)"
-            echo ""
-            echo "| Metric | Base (main) | PR | Diff |"
-            echo "|--------|-------------|-----|------|"
-            echo "| Statements | ${BASE_STMT}% | ${PR_STMT}% | ${STMT_DIFF_FMT} |"
-            echo "| Branches | ${BASE_BRANCH}% | ${PR_BRANCH}% | ${BRANCH_DIFF_FMT} |"
-            echo "| Functions | ${BASE_FUNC}% | ${PR_FUNC}% | ${FUNC_DIFF_FMT} |"
-            echo "| Lines | ${BASE_LINES}% | ${PR_LINES}% | ${LINES_DIFF_FMT} |"
-            echo ""
-            echo "### Status"
-            echo "${STATUS}${BASE_NOTE}"
-            echo ""
-            echo "### Thresholds"
-            echo "- Minimum coverage: **${THRESHOLD}%**"
-            echo "- Coverage must not decrease from base branch"
-            echo ""
-            echo "---"
-            echo "*🔱 Heimdallr watches over your code coverage*"
-            echo "EOFCONTENT"
-          } >> "$GITHUB_OUTPUT"
+            const botComment = comments.find(c =>
+              c.body && c.body.includes('<!-- heimdallr-coverage-report -->')
+            );
+
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: body
+              });
+            }
 
       - name: Fail if coverage thresholds not met
         run: |
@@ -186,14 +181,3 @@ jobs:
           fi
 
           echo "✅ Coverage checks passed"
-
-  post-comment:
-    name: Post Coverage Comment
-    needs: coverage-report
-    uses: discrapp/.github/.github/workflows/heimdallr.yml@main
-    with:
-      enable_comment_on_pr: true
-      comment_content: ${{ needs.coverage-report.outputs.comment_content }}
-      comment_identifier: "<!-- heimdallr-coverage-report -->"
-    secrets:
-      HEIMDALLR_TOKEN: ${{ secrets.HEIMDALLR_TOKEN }}
