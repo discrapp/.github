@@ -85,11 +85,14 @@ jobs:
         id: cache-restore
         uses: actions/cache/restore@v4
         with:
-          path: base-coverage/coverage-summary.json
+          path: ${{ inputs.working_directory }}/base-coverage/coverage-summary.json
           key: coverage-main-latest
+          restore-keys: |
+            coverage-main-
 
       - name: Get base coverage values
         id: base-coverage
+        working-directory: ${{ inputs.working_directory }}
         run: |
           if [ -f base-coverage/coverage-summary.json ]; then
             STATEMENTS=$(jq '.total.statements.pct' base-coverage/coverage-summary.json)
@@ -109,18 +112,25 @@ jobs:
             echo "lines=$LINES"
           } >> "$GITHUB_OUTPUT"
 
+      - name: Prepare coverage for caching
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        working-directory: ${{ inputs.working_directory }}
+        run: |
+          mkdir -p base-coverage
+          cp coverage/coverage-summary.json base-coverage/coverage-summary.json
+
       - name: Cache main branch coverage
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/cache/save@v4
         with:
-          path: ${{ inputs.working_directory }}/coverage/coverage-summary.json
+          path: ${{ inputs.working_directory }}/base-coverage/coverage-summary.json
           key: coverage-main-${{ github.sha }}
 
       - name: Update latest main coverage cache
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/cache/save@v4
         with:
-          path: ${{ inputs.working_directory }}/coverage/coverage-summary.json
+          path: ${{ inputs.working_directory }}/base-coverage/coverage-summary.json
           key: coverage-main-latest
 
   coverage-report:
