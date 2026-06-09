@@ -11,7 +11,7 @@
   "commitMessageExtra": "to {{newValue}}",
   "commitMessageTopic": "{{depName}}",
   "platformAutomerge": true,
-  "rebaseWhen": "behind-base-branch",
+  "rebaseWhen": "conflicted",
   "labels": ["dependencies", "renovate"],
   "assignees": ["@benniemosher"],
   "vulnerabilityAlerts": {
