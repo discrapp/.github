@@ -23,7 +23,7 @@
       "description": "Automerge patch and minor updates when tests pass",
       "matchUpdateTypes": ["patch", "minor"],
       "automerge": true,
-      "automergeType": "merge-queue"
+      "automergeType": "pr"
     },
     {
       "description": "GitHub Actions - group and automerge patch/minor",
@@ -31,7 +31,7 @@
       "matchUpdateTypes": ["minor", "patch"],
       "groupName": "github-actions non-major",
       "automerge": true,
-      "automergeType": "merge-queue"
+      "automergeType": "pr"
     },
     {
       "description": "Pre-commit hooks - group updates",
